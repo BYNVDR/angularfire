@@ -1,44 +1,80 @@
 import { Component, OnInit } from '@angular/core';
 import { AngularFireMessaging } from '@angular/fire/messaging';
+import { Observable } from 'rxjs';
 import { mergeMapTo } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
   template: `
   <button (click)="requestPermission()">
-    Hello this is a chat app. You should let us send you notifications for this reason.
+    Подписаться на уведомления
   </button><br>
-  <button (click)="listen()">
-    Get notified!
-  </button><br><br>
-
-  <button (click)="send()">
-    Go nutify!
-  </button><br><br>
+  <br><br><hr>
+  <div *ngIf="token.length > 0">
+    Токен: <br><b>{{token}}</b>
+  </div>
+  <br>
+  <br><br><hr>
+  <div>Если пользователь сейчас на страничке, то мы можем вывести ему уведомление</div>
+  <div style="border: 1px dashed; padding: 20px" *ngIf="pushMessage">
+    <h2>{{pushMessage.title}}</h2>
+    <p>{{pushMessage.body}}</p>
+    <img src="{{pushMessage.image}}" />
+  </div>
   `
 })
 export class AppComponent implements OnInit {
+
+
+  token: string = 'ещё не получен';
+  pushMessage = null;
+  protected localStorageName: string = 'notificationToken';
 
   constructor(private afMessaging: AngularFireMessaging) { }
 
 
   ngOnInit() {
     console.log('ok, we init, go listen messages');
-    
+
+    const token = localStorage.getItem(this.localStorageName);
+    console.log('token is in localStorage', token);
+
+    if (!token) {
+      this.afMessaging.getToken.subscribe(
+        (token) => {
+          this.saveToken(token);
+          console.log('token saves localy', localStorage.getItem(this.localStorageName));
+
+        },
+        (error) => { console.error(error); },
+      )
+    } else {
+      this.token = token;
+    }
+
     this.afMessaging.messages
-      .subscribe((message) => { 
-        
+      .subscribe((message) => {
+
         console.log(message);
-      
+        console.log(message['notification']['title']);
+
+
+        this.pushMessage = message['notification'];
+
       });
+   
+
   }
 
   requestPermission() {
     this.afMessaging.requestPermission
       .pipe(mergeMapTo(this.afMessaging.tokenChanges))
       .subscribe(
-        (token) => { console.log('Permission granted! Save to the server!', token); },
-        (error) => { console.error(error); },  
+        (token) => {
+          console.log('Permission granted! Save to the server!', token);
+          this.token = token;
+        },
+        (error) => { console.error(error); },
       );
   }
 
@@ -46,35 +82,10 @@ export class AppComponent implements OnInit {
     this.afMessaging.messages
       .subscribe((message) => { console.log(message); });
   }
-  send() {
-    this.afMessaging.getToken.subscribe(token => {
-      console.log('token on getToken subscribe', token);
-      
-      const key = 'BKMXf-RGn51MY2SKQcBMiq7ho9G9G_tfeoEKZp3sXRJkohmj2u-mmPcYHzktzpltUPe2s8xttBnaRvu_YR19sv8';
-      fetch('https://fcm.googleapis.com/fcm/send', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'key=' + key,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    data: {
-                        "title": "Ералаш",
-                        "body": "Начало в 21:00",
-                        "icon": "https://eralash.ru.rsz.io/sites/all/themes/eralash_v5/logo.png?width=40&height=40",
-                        "click_action": "http://eralash.ru/",
-                        "image": "https://peter-gribanov.github.io/serviceworker/Bubble-Nebula_big.jpg"
-                    },
-                    to: token
-                })
-            }).then(function(response) {
-                return response.json();
-            }).then(function(json) {
-                console.log('Response', json);
-            }).catch(function(error) {
-                console.log('error send notify', error);
-                
-            });
-    });
+
+  saveToken(token) {
+    this.token = token;
+    localStorage.setItem(this.localStorageName, token);
   }
+
 }
